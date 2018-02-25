@@ -15,9 +15,9 @@
 package endpoints
 
 import (
-	"net/http"
 	"database/sql"
 	"log"
+	"net/http"
 )
 
 // CrudService exposes a db connection as a REST-ish service,
@@ -25,30 +25,39 @@ import (
 type CrudService struct {
 	// Configurables
 	RootPath string
-	Port string
 	// TODO: Auth Strategy
 	// TODO: Pagination config
 
 	// Internals
-	paths map[string]http.Handler
-	db *sql.DB
-	mux *http.ServeMux
+	db  *sql.DB
+	mux *http.ServeMux // Exposed for convenience
+	srv *http.Server
 }
 
 func NewCrudService(path, port string, db *sql.DB) CrudService {
-	return CrudService {
+	mux := http.NewServeMux()
+	return CrudService{
 		path,
-		port,
-		map[string]http.Handler{},
 		db,
-		http.NewServeMux(),
+		mux,
+		&http.Server{Addr: port, Handler: mux},
 	}
 }
 
 func (s *CrudService) ListenAndServe() {
-	log.Fatal(http.ListenAndServe(s.Port, s.mux))
+	defer func() {
+		err := s.db.Close()
+		if err != nil {
+			log.Printf("Unable to close DB connection! %s", err)
+		}
+	}()
+	log.Fatal(s.srv.ListenAndServe())
 }
 
-func (s *CrudService) AddEndpoint(path string, f http.HandlerFunc) {
-	s.mux.Handle(path, f)
+// func (s *CrudService) Close() {
+// 	log.Fatal(s.srv.Close())
+// }
+
+func (s *CrudService) AddEndpoint(path string, h http.Handler) {
+	s.mux.Handle(path, h)
 }
